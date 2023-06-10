@@ -35,6 +35,7 @@ static const char
 #endif
 
 #include "lwmqtt.h"
+#include "esp8266_tls_compat.h"
 
 #ifdef	CONFIG_REVK_MQTT_SERVER
 #warning MQTT server code is not complete
@@ -731,7 +732,7 @@ static void client_task(void *pvParameters)
          handle->backoff *= 2;
       else
          handle->backoff = 255;
-      ESP_LOGI(TAG, "Waiting %d (mem:%ld)", handle->backoff / 5, esp_get_free_heap_size());
+      ESP_LOGI(TAG, "Waiting %d (mem:%d)", handle->backoff / 5, esp_get_free_heap_size());
       sleep(handle->backoff < 5 ? 1 : handle->backoff / 5);
    }
    handle_free(handle);

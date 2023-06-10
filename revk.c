@@ -10,12 +10,13 @@ static const char __attribute__((unused)) * TAG = "RevK";
 // Note, low wifi buffers breaks mesh
 
 #include "revk.h"
-#include "esp_flash_spi_init.h"
+#ifndef CONFIG_IDF_TARGET_ESP8266
 #include "esp_mac.h"
+#include "aes/esp_aes.h"
+#endif
 #include "esp_http_client.h"
 #include "esp_ota_ops.h"
 #include "esp_tls.h"
-#include "aes/esp_aes.h"
 #ifdef	CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 #include "esp_crt_bundle.h"
 #else
@@ -35,6 +36,11 @@ static const char __attribute__((unused)) * TAG = "RevK";
 #ifdef  CONFIG_NIMBLE_ENABLED
 #include "esp_bt.h"
 #endif
+
+#include "esp8266_ota_compat.h"
+#include "esp8266_flash_compat.h"
+#include "esp8266_gpio_compat.h"
+#include "esp8266_wdt_compat.h"
 
 #define	WIFINOPASS	"none"
 #define	WIFIUNCHANGED	"as is"
@@ -1205,7 +1211,7 @@ ip_event_handler (void *arg, esp_event_base_t event_base, int32_t event_id, void
 #endif
 #endif
       default:
-         ESP_LOGI (TAG, "WiFi event %ld", event_id);
+         ESP_LOGI (TAG, "WiFi event %d", event_id);
          break;
       }
    }
@@ -1255,14 +1261,14 @@ ip_event_handler (void *arg, esp_event_base_t event_base, int32_t event_id, void
          ESP_LOGI (TAG, "Got IPv6");
          break;
       default:
-         ESP_LOGI (TAG, "IP event %ld", event_id);
+         ESP_LOGI (TAG, "IP event %d", event_id);
          break;
       }
    }
 #ifdef	CONFIG_REVK_MESH
    if (event_base == MESH_EVENT)
    {
-      ESP_LOGI (TAG, "Mesh event %ld", event_id);
+      ESP_LOGI (TAG, "Mesh event %d", event_id);
       switch (event_id)
       {
       case MESH_EVENT_STOPPED:
@@ -1357,7 +1363,7 @@ static void
 task (void *pvParameters)
 {                               /* Main RevK task */
    if (watchdogtime)
-      esp_task_wdt_add (NULL);
+      compat_task_wdt_add ();
    pvParameters = pvParameters;
    /* Log if unexpected restart */
    int64_t tick = 0;
@@ -1447,13 +1453,13 @@ task (void *pvParameters)
             }
          }
 #ifdef CONFIG_REVK_MESH
-         ESP_LOGI (TAG, "Up %ld, Link down %ld, Mesh nodes %d%s", now, revk_link_down (), esp_mesh_get_total_node_num (),
+         ESP_LOGI (TAG, "Up %d, Link down %ld, Mesh nodes %d%s", now, revk_link_down (), esp_mesh_get_total_node_num (),
                    esp_mesh_is_root ()? " (root)" : mesh_root_known ? " (leaf)" : " (no-root)");
 #else
 #ifdef	CONFIG_REVK_WIFI
-         ESP_LOGI (TAG, "Up %ld, Link down %ld", now, revk_link_down ());
+         ESP_LOGI (TAG, "Up %d, Link down %d", now, revk_link_down ());
 #else
-         ESP_LOGI (TAG, "Up %ld", now);
+         ESP_LOGI (TAG, "Up %d", now);
 #endif
 #endif
 #ifdef	CONFIG_REVK_MQTT
@@ -1639,12 +1645,12 @@ revk_boot (app_callback_t * app_callback_cb)
 #endif
          /* Check and update partition table - expects some code to stay where it can run, i.e.0x10000, but may clear all settings */
          if ((part_end - part_start) > secsize)
-            ESP_LOGE (TAG, "Block size error (%d>%ld)", part_end - part_start, secsize);
+            ESP_LOGE (TAG, "Block size error (%ld>%d)", part_end - part_start, secsize);
          else
          {
             uint8_t *mem = malloc (secsize);
             if (!mem)
-               ESP_LOGE (TAG, "Malloc fail: %ld", secsize);
+               ESP_LOGE (TAG, "Malloc fail: %d", secsize);
             else
             {
                REVK_ERR_CHECK (esp_flash_read (NULL, mem, CONFIG_PARTITION_TABLE_OFFSET, secsize));
@@ -1672,7 +1678,7 @@ revk_boot (app_callback_t * app_callback_cb)
             }
          }
       } else
-         ESP_LOGE (TAG, "Flash partition not updated, size is unexpected: %ld (%s)", size, table);
+         ESP_LOGE (TAG, "Flash partition not updated, size is unexpected: %d (%s)", size, table);
    }
 #endif
    ESP_LOGI (TAG, "nvs_flash_init");
@@ -1750,14 +1756,7 @@ revk_boot (app_callback_t * app_callback_cb)
 #undef bdp
    if (watchdogtime)
    {                            /* Watchdog */
-      esp_task_wdt_config_t config = {
-         .timeout_ms = watchdogtime * 1000,
-         .trigger_panic = true,
-      };
-#ifndef	CONFIG_ESP_TASK_WDT_INIT
-      if (esp_task_wdt_init (&config))
-#endif
-         esp_task_wdt_reconfigure (&config);
+      compat_task_wdt_reconfigure(true, watchdogtime * 1000, true);
    }
    REVK_ERR_CHECK (nvs_open (app->project_name, NVS_READWRITE, &nvs));
    /* Application specific settings */
@@ -3954,11 +3953,7 @@ revk_upgrade (const char *target, jo_t j)
          return "";
       }
       ESP_LOGI (TAG, "Resetting watchdog");
-      esp_task_wdt_config_t config = {
-         .timeout_ms = 120 * 1000,
-         .trigger_panic = true,
-      };
-      REVK_ERR_CHECK (esp_task_wdt_reconfigure (&config));
+      REVK_ERR_CHECK (compat_task_wdt_reconfigure (false, 120 * 1000, true));
       revk_restart ("OTA Download", 10);        // Restart if download does not happen properly
 #ifdef	CONFIG_NIMBLE_ENABLED
       ESP_LOGI (TAG, "Stopping any BLE");
