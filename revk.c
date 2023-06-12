@@ -700,8 +700,13 @@ wifi_sta_config (void)
    cfg.sta.scan_method = ((esp_reset_reason () == ESP_RST_DEEPSLEEP) ? WIFI_FAST_SCAN : WIFI_ALL_CHANNEL_SCAN);
    strncpy ((char *) cfg.sta.ssid, ssid, sizeof (cfg.sta.ssid));
    strncpy ((char *) cfg.sta.password, wifipass, sizeof (cfg.sta.password));
+#ifdef CONFIG_IDF_TARGET_ESP8266
+   REVK_ERR_CHECK (esp_wifi_set_protocol
+                   (ESP_IF_WIFI_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N));
+#else
    REVK_ERR_CHECK (esp_wifi_set_protocol
                    (ESP_IF_WIFI_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR));
+#endif
    REVK_ERR_CHECK (esp_wifi_set_config (ESP_IF_WIFI_STA, &cfg));
 }
 #endif
