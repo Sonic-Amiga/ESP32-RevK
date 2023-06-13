@@ -45,6 +45,15 @@ static const char __attribute__((unused)) * TAG = "RevK";
 #define	WIFINOPASS	"none"
 #define	WIFIUNCHANGED	"as is"
 
+static bool no_change(const char *pass)
+{
+   // When pressing "Set" my browser actually supplies "pass=as+is" on the URL,
+   // and this string gets passed unmodified to the app. Maybe it's esp866
+   // webserver flaw, maybe it's an overlook from the original code - i don't know
+   return !(strcmp (pass, WIFIUNCHANGED) &&
+            strcmp (pass, "as+is"));
+}
+
 const char revk_build_suffix[] = CONFIG_REVK_BUILD_SUFFIX;
 
 // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/esp_tls.html
@@ -2164,7 +2173,7 @@ revk_web_config (httpd_req_t * req)
                jo_t j = jo_object_alloc ();
                jo_object (j, "wifi");
                jo_string (j, "ssid", ssid);
-               if (!strcmp (pass, WIFIUNCHANGED))
+               if (no_change(pass))
                   jo_string (j, "pass", wifipass);
                else if (!strcmp (pass, WIFINOPASS))
                   jo_string (j, "pass", "");
@@ -2201,7 +2210,11 @@ revk_web_config (httpd_req_t * req)
                jo_free (&j);
             }
          }
-         httpd_resp_sendstr (req, "<h1>Done</h1>");
+         httpd_resp_sendstr_chunk (req, "<html><body><h1>Done</h1>");
+         httpd_resp_sendstr_chunk (req, "<a href=\"/\">Go to main page</a><br>");
+         httpd_resp_sendstr_chunk (req, "<a href=\"/wifi\">Back to settings</a>");
+         httpd_resp_sendstr_chunk (req, "</body></html>");
+         httpd_resp_sendstr_chunk (req, NULL);
          apstoptime = uptime ();
          return ESP_OK;
       }
@@ -2265,6 +2278,7 @@ revk_web_config (httpd_req_t * req)
    httpd_resp_sendstr_chunk (req,
                              "' autocapitalize='off' autocomplete='off' spellcheck='false' autocorrect='off'></td></tr></table><input id=set type=submit value=Set>&nbsp;<b id=msg></b></form>");
    httpd_resp_sendstr_chunk (req, "<div id=list></div>");
+#ifdef CONFIG_HTTPD_WS_SUPPORT
    httpd_resp_sendstr_chunk (req, "<script>"    //
                              "var f=document.WIFI;"     //
                              "var ws = new WebSocket('ws://'+window.location.host+'/wifilist');"        //
@@ -2287,6 +2301,7 @@ revk_web_config (httpd_req_t * req)
                              "});"      //
                              "}"        //
                              "</script>");
+#endif
    httpd_resp_sendstr_chunk (req, "<p><a href='/'>Home</a></p><hr><address>");
    httpd_resp_sendstr_chunk (req, appname);
    httpd_resp_sendstr_chunk (req, ": ");
@@ -2502,9 +2517,11 @@ revk_web_wifilist (httpd_req_t * req)
    return ret;
 }
 #else
+#ifndef CONFIG_IDF_TARGET_ESP8266
 #warning	You may want CONFIG_HTTPD_WS_SUPPORT
 #endif
-#endif
+#endif // CONFIG_HTTPD_WS_SUPPORT
+#endif // CONFIG_REVK_APMODE
 
 #ifdef	CONFIG_REVK_APDNS
 static void
