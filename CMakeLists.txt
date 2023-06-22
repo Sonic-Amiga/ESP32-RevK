@@ -11,6 +11,7 @@ set(RECS nvs_flash app_update esp_http_client esp-tls esp_http_server spi_flash 
 
 if(EXISTS "../managed_components/espressif__mdns")
 	set(RECS ${RECS} mdns)
+	add_definitions(-DHAVE_MDNS)
 endif()
 
 idf_component_register(

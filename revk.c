@@ -30,6 +30,13 @@ static const char __attribute__((unused)) * TAG = "RevK";
 #include <esp_mesh.h>
 #include "freertos/semphr.h"
 #endif
+// CONFIG_* have been picked up at this point
+#ifndef HAVE_MDNS
+#ifdef CONFIG_MDNS_MAX_INTERFACES
+#warning CONFIG_MDNS_MAX_INTERFACES is set but espressif__mdns is not present!
+#undef CONFIG_MDNS_MAX_INTERFACES
+#endif
+#endif
 #ifdef  CONFIG_MDNS_MAX_INTERFACES
 #include "mdns.h"
 #endif
