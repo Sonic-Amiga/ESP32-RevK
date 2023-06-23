@@ -45,17 +45,6 @@ static const char __attribute__((unused)) * TAG = "RevK";
 #define	WIFINOPASS	"none"
 #define	WIFIUNCHANGED	"as is"
 
-#ifndef  CONFIG_HTTPD_WS_SUPPORT
-static bool
-no_change (const char *pass)
-{
-   // When pressing "Set" my browser actually supplies "pass=as+is" on the URL,
-   // and this string gets passed unmodified to the app. Maybe it's esp866
-   // webserver flaw, maybe it's an overlook from the original code - i don't know
-   return !(strcmp (pass, WIFIUNCHANGED) && strcmp (pass, "as+is"));
-}
-#endif
-
 const char revk_build_suffix[] = CONFIG_REVK_BUILD_SUFFIX;
 
 // https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/protocols/esp_tls.html
@@ -2115,6 +2104,50 @@ revk_restart (const char *reason, int delay)
    return "";                   /* Done */
 }
 
+// It seems that ESP8266 webserver doesn't unescape strings in httpd_query_key_value().
+// We have to do it ourselves.
+static int parse_hexdigit(char c)
+{
+   if (c >= '0' && c <'9')
+      return c - '0';
+   else if (c >= 'A' && c <= 'F')
+      return c - 'A' + 10;
+   else if (c >= 'a' && c <= 'f')
+      return c - 'a' + 10;
+   else
+      return -1;
+}
+
+static esp_err_t
+revk_query_key_value(const char *qry_str, const char *key, char *val, size_t val_size)
+{
+   esp_err_t ret = httpd_query_key_value(qry_str, key, val, val_size);
+   char *s, *d;
+
+   if (ret != ESP_OK)
+      return ret;
+
+   s = val;
+   d = val;
+
+   // Unescape on the spot
+   while (*s) {
+      if (*s == '%') {
+         int c = parse_hexdigit(s[1]) << 4 | parse_hexdigit(s[2]);
+
+         s += 2; // Consumed two more chars (hex code)
+         *d = (c < 0) ? '?' : c;
+      } else {
+         *d = (*s == '+') ? ' ' : *s;
+      }
+      s++;
+      d++;
+   }
+
+   *d = 0;
+   return ESP_OK;
+}
+
 #ifdef	CONFIG_REVK_APMODE
 esp_err_t
 revk_web_config_start (httpd_handle_t webserver)
@@ -2173,19 +2206,19 @@ revk_web_config (httpd_req_t * req)
       {
          {
             char ug[10];
-            if (!httpd_query_key_value (query, "upgrade", ug, sizeof (ug)))
+            if (!revk_query_key_value (query, "upgrade", ug, sizeof (ug)))
                revk_command ("upgrade", NULL);
          }
          {
             char ssid[33],
               pass[33];
-            if (!httpd_query_key_value (query, "ssid", ssid, sizeof (ssid)) && *ssid
-                && !httpd_query_key_value (query, "pass", pass, sizeof (pass)))
+            if (!revk_query_key_value (query, "ssid", ssid, sizeof (ssid)) && *ssid
+                && !revk_query_key_value (query, "pass", pass, sizeof (pass)))
             {
                jo_t j = jo_object_alloc ();
                jo_object (j, "wifi");
                jo_string (j, "ssid", ssid);
-               if (no_change (pass))
+               if (!strcmp (pass, WIFIUNCHANGED))
                   jo_string (j, "pass", wifipass);
                else if (!strcmp (pass, WIFINOPASS))
                   jo_string (j, "pass", "");
@@ -2199,9 +2232,9 @@ revk_web_config (httpd_req_t * req)
             char host[129];
             char user[33];
             char pass[33];
-            if (!httpd_query_key_value (query, "mqtthost", host, sizeof (host))
-                && !httpd_query_key_value (query, "mqttuser", user, sizeof (user))
-                && !httpd_query_key_value (query, "mqttpass", pass, sizeof (pass)))
+            if (!revk_query_key_value (query, "mqtthost", host, sizeof (host))
+                && !revk_query_key_value (query, "mqttuser", user, sizeof (user))
+                && !revk_query_key_value (query, "mqttpass", pass, sizeof (pass)))
             {
                jo_t j = jo_object_alloc ();
                jo_object (j, "mqtt");
@@ -2214,7 +2247,7 @@ revk_web_config (httpd_req_t * req)
          }
          {
             char host[33];
-            if (!httpd_query_key_value (query, "host", host, sizeof (host)) && *host)
+            if (!revk_query_key_value (query, "host", host, sizeof (host)) && *host)
             {
                jo_t j = jo_object_alloc ();
                jo_string (j, "hostname", host);
@@ -2224,7 +2257,7 @@ revk_web_config (httpd_req_t * req)
          }
          {
             char settz[129];
-            if (!httpd_query_key_value (query, "tz", settz, sizeof (settz)) && *settz)
+            if (!revk_query_key_value (query, "tz", settz, sizeof (settz)) && *settz)
             {
                jo_t j = jo_object_alloc ();
                jo_string (j, "tz", settz);
