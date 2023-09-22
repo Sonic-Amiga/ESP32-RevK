@@ -2467,6 +2467,13 @@ revk_web_settings (httpd_req_t * req)
    if (shutdown && *shutdown)
       httpd_resp_sendstr_chunk (req, shutdown);
    httpd_resp_sendstr_chunk (req, "</b></p>");
+#else
+   if (shutdown && *shutdown)
+   {
+      httpd_resp_sendstr_chunk (req, "<p><b id=msg style='background:white;border: 1px solid red;padding:3px;'>");
+      httpd_resp_sendstr_chunk (req, shutdown);
+      httpd_resp_sendstr_chunk (req, "</b></p>");
+   }
 #endif
    httpd_resp_sendstr_chunk (req,
                              "<form action=/revk-settings name=WIFI method=post onsubmit=\"document.getElementById('set').style.visibility='hidden';document.getElementById('msg').textContent='Please wait';return true;\">");
