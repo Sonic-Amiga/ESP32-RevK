@@ -3065,14 +3065,12 @@ ota_task (void *pvParameters)
          }
 #else
          esp_ota_handle_t ota_handle;
-         const esp_partition_t *ota_partition = NULL;
          int ota_progress = 0;
          int ota_data = 0;
          uint32_t next = 0;
          uint32_t now = uptime ();
-         if (!ota_partition)
-            ota_partition = esp_ota_get_running_partition ();
-         ota_partition = esp_ota_get_next_update_partition (ota_partition);
+         const esp_partition_t *run_partition = esp_ota_get_running_partition ();
+         const esp_partition_t *ota_partition = esp_ota_get_next_update_partition (run_partition);
          if (!ota_partition)
          {
             jo_t j = jo_object_alloc ();
@@ -3082,6 +3080,8 @@ ota_task (void *pvParameters)
             ota_percent = -3;
          } else
          {
+            ESP_LOGI (TAG, "Running partition %s at 0x%08x", run_partition->label, run_partition->address);
+            ESP_LOGI (TAG, "OTA partition %s at 0x%08x", ota_partition->label, ota_partition->address);
             jo_t j = jo_make (NULL);
             jo_string (j, "partition", ota_partition->label);
             jo_stringf (j, "start", "%X", ota_partition->address);
